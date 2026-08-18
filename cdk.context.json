@@ -6,5 +6,9 @@
     "us-east-1d",
     "us-east-1e",
     "us-east-1f"
-  ]
+  ],
+  "hosted-zone:account=339712793841:domainName=chess-mentor.com:privateZone=false:region=us-east-1": {
+    "Id": "/hostedzone/Z0849831MW4HWU560YP4",
+    "Name": "chess-mentor.com."
+  }
 }

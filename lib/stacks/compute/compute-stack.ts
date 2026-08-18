@@ -6,12 +6,22 @@ import {
   Tags,
 } from "aws-cdk-lib";
 import {
+  Certificate,
+  CertificateValidation,
+} from "aws-cdk-lib/aws-certificatemanager";
+import {
   CfnSecurityGroupIngress,
   type IVpc,
   type SecurityGroup,
 } from "aws-cdk-lib/aws-ec2";
 import { Cluster } from "aws-cdk-lib/aws-ecs";
 import type { Function } from "aws-cdk-lib/aws-lambda";
+import {
+  ARecord,
+  HostedZone,
+  RecordTarget,
+} from "aws-cdk-lib/aws-route53";
+import { LoadBalancerTarget } from "aws-cdk-lib/aws-route53-targets";
 import { Secret, type ISecret } from "aws-cdk-lib/aws-secretsmanager";
 import { Construct } from "constructs";
 import type { EnvironmentName } from "../../config/environments";
@@ -57,6 +67,15 @@ export class ComputeStack extends Stack {
       name: props.environmentName,
     };
     const resourceNamePrefix = getResourceName(namingIdentity, "compute");
+    const hostedZone = HostedZone.fromLookup(this, "ApiHostedZone", {
+      domainName: props.compute.apiDns.zoneName,
+      privateZone: false,
+    });
+    const certificate = new Certificate(this, "ApiCertificate", {
+      domainName: props.compute.apiDns.domainName,
+      validation: CertificateValidation.fromDns(hostedZone),
+    });
+    certificate.applyRemovalPolicy(props.compute.removalPolicy);
 
     this.cluster = new Cluster(this, "Cluster", {
       vpc: props.vpc,
@@ -99,6 +118,17 @@ export class ComputeStack extends Stack {
       pythonFunction: props.pythonFunction,
       resourceNamePrefix,
       config: props.compute,
+      publicEndpoint: {
+        certificate,
+        domainName: props.compute.apiDns.domainName,
+        httpPort: props.compute.albHttpPort,
+        httpsPort: props.compute.albHttpsPort,
+      },
+    });
+    new ARecord(this, "ApiAliasRecord", {
+      zone: hostedZone,
+      recordName: props.compute.apiDns.recordName,
+      target: RecordTarget.fromAlias(new LoadBalancerTarget(web.loadBalancer)),
     });
     const worker = new SidekiqService(this, "Sidekiq", {
       vpc: props.vpc,
@@ -158,8 +188,16 @@ export class ComputeStack extends Stack {
     );
 
     new CfnOutput(this, "ApplicationUrl", {
-      description: "Development Rails HTTP endpoint",
-      value: `http://${web.loadBalancer.loadBalancerDnsName}`,
+      description: "Development Rails HTTPS endpoint",
+      value: `https://${props.compute.apiDns.domainName}`,
+    });
+    new CfnOutput(this, "ApplicationDomainName", {
+      description: "Development Rails API domain name",
+      value: props.compute.apiDns.domainName,
+    });
+    new CfnOutput(this, "CertificateArn", {
+      description: "Development Rails API certificate ARN",
+      value: certificate.certificateArn,
     });
     new CfnOutput(this, "LoadBalancerDnsName", {
       description: "Development Rails application load balancer DNS name",

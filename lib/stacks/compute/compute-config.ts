@@ -16,6 +16,12 @@ export interface ComputeServiceConfig extends ComputeWorkloadConfig {
   readonly maxHealthyPercent: 100;
 }
 
+export interface ComputeApiDnsConfig {
+  readonly zoneName: string;
+  readonly recordName: string;
+  readonly domainName: string;
+}
+
 export interface ComputeConfig {
   readonly web: ComputeServiceConfig & {
     readonly maxThreads: number;
@@ -30,6 +36,8 @@ export interface ComputeConfig {
   };
   readonly containerPort: 3000;
   readonly albHttpPort: 80;
+  readonly albHttpsPort: 443;
+  readonly apiDns: ComputeApiDnsConfig;
   readonly healthEndpoint: "/up";
   readonly healthCheckGracePeriod: Duration;
   readonly taskSubnetType: SubnetType.PRIVATE_WITH_EGRESS;
@@ -41,6 +49,10 @@ export interface ComputeConfig {
   readonly removalPolicy: RemovalPolicy.DESTROY;
   readonly railsSecretLength: number;
 }
+
+const apiZoneName = "chess-mentor.com";
+const apiRecordName = "api-dev";
+const apiDomainName = `${apiRecordName}.${apiZoneName}`;
 
 const computeConfigs = {
   dev: {
@@ -69,6 +81,12 @@ const computeConfigs = {
     },
     containerPort: 3000,
     albHttpPort: 80,
+    albHttpsPort: 443,
+    apiDns: {
+      zoneName: apiZoneName,
+      recordName: apiRecordName,
+      domainName: apiDomainName,
+    },
     healthEndpoint: "/up",
     healthCheckGracePeriod: Duration.seconds(90),
     taskSubnetType: SubnetType.PRIVATE_WITH_EGRESS,
@@ -83,5 +101,30 @@ const computeConfigs = {
 } as const satisfies Record<EnvironmentName, ComputeConfig>;
 
 export function getComputeConfig(environmentName: EnvironmentName): ComputeConfig {
-  return computeConfigs[environmentName];
+  const config = computeConfigs[environmentName];
+  validateApiDnsConfig(config.apiDns);
+  return config;
+}
+
+function validateApiDnsConfig(config: ComputeApiDnsConfig): void {
+  const expectedDomainName = `${config.recordName}.${config.zoneName}`;
+  const isValidLabel = (label: string): boolean =>
+    /^(?!-)[a-z0-9-]{1,63}(?<!-)$/.test(label);
+  const zoneLabels = config.zoneName.split(".");
+
+  if (
+    config.zoneName.length > 253 ||
+    zoneLabels.length < 2 ||
+    !zoneLabels.every(isValidLabel)
+  ) {
+    throw new Error(`Invalid public hosted zone name: ${config.zoneName}`);
+  }
+  if (!isValidLabel(config.recordName)) {
+    throw new Error(`Invalid API DNS record name: ${config.recordName}`);
+  }
+  if (config.domainName !== expectedDomainName) {
+    throw new Error(
+      `API domain ${config.domainName} must equal ${config.recordName}.${config.zoneName}`,
+    );
+  }
 }

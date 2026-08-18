@@ -1,4 +1,5 @@
 import { Duration } from "aws-cdk-lib";
+import type { ICertificate } from "aws-cdk-lib/aws-certificatemanager";
 import { Peer, Port, SecurityGroup, type IVpc } from "aws-cdk-lib/aws-ec2";
 import {
   AvailabilityZoneRebalancing,
@@ -11,7 +12,9 @@ import {
   ApplicationLoadBalancer,
   ApplicationProtocol,
   ApplicationTargetGroup,
+  ListenerAction,
   Protocol as ElbProtocol,
+  SslPolicy,
   TargetType,
 } from "aws-cdk-lib/aws-elasticloadbalancingv2";
 import type { Function } from "aws-cdk-lib/aws-lambda";
@@ -26,6 +29,12 @@ export interface WebServiceProps {
   readonly pythonFunction: Function;
   readonly resourceNamePrefix: string;
   readonly config: ComputeConfig;
+  readonly publicEndpoint: {
+    readonly certificate: ICertificate;
+    readonly domainName: string;
+    readonly httpPort: number;
+    readonly httpsPort: number;
+  };
 }
 
 export class WebService extends Construct {
@@ -45,8 +54,13 @@ export class WebService extends Construct {
     });
     this.loadBalancerSecurityGroup.addIngressRule(
       Peer.anyIpv4(),
-      Port.tcp(props.config.albHttpPort),
+      Port.tcp(props.publicEndpoint.httpPort),
       "Public HTTP",
+    );
+    this.loadBalancerSecurityGroup.addIngressRule(
+      Peer.anyIpv4(),
+      Port.tcp(props.publicEndpoint.httpsPort),
+      "Public HTTPS",
     );
 
     this.securityGroup = new SecurityGroup(this, "SecurityGroup", {
@@ -120,11 +134,25 @@ export class WebService extends Construct {
       deletionProtection: false,
       dropInvalidHeaderFields: true,
     });
-    this.loadBalancer.addListener("HttpListener", {
-      port: props.config.albHttpPort,
-      protocol: ApplicationProtocol.HTTP,
+    const httpsListener = this.loadBalancer.addListener("HttpsListener", {
+      port: props.publicEndpoint.httpsPort,
+      protocol: ApplicationProtocol.HTTPS,
       open: false,
+      certificates: [props.publicEndpoint.certificate],
+      sslPolicy: SslPolicy.RECOMMENDED_TLS,
       defaultTargetGroups: [this.targetGroup],
     });
+    const httpListener = this.loadBalancer.addListener("HttpListener", {
+      port: props.publicEndpoint.httpPort,
+      protocol: ApplicationProtocol.HTTP,
+      open: false,
+      defaultAction: ListenerAction.redirect({
+        host: props.publicEndpoint.domainName,
+        port: String(props.publicEndpoint.httpsPort),
+        protocol: "HTTPS",
+        permanent: true,
+      }),
+    });
+    httpListener.node.addDependency(httpsListener);
   }
 }
