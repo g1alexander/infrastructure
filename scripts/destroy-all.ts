@@ -23,6 +23,7 @@ interface Stack { readonly StackName: string; readonly StackId: string; readonly
 interface StackResource { readonly ResourceType?: string; readonly PhysicalResourceId?: string }
 interface ImageId { readonly imageDigest?: string; readonly imageTag?: string }
 interface S3Version { readonly Key?: string; readonly VersionId?: string }
+interface RecordSet extends Record<string, unknown> { readonly Name?: string; readonly Type?: string }
 
 class DnsBlockedError extends Error {}
 
@@ -113,7 +114,7 @@ Usage:
 
 Options:
   --confirm <phrase>     Required exact destructive confirmation
-  --delete-hosted-zone  Attempt protected deletion of ${ZONE}
+  --delete-hosted-zone  Delete ${ZONE} and all non-default records after delegation checks
   --dry-run             Print the plan without invoking AWS or DNS
   --profile <name>      AWS profile (default: ${PROFILE})
   -h, --help            Show help without invoking AWS or DNS
@@ -127,7 +128,7 @@ function printPlan(options: Options, dryRun: boolean): void {
   console.log("  CDKToolkit: empty current/versioned S3 objects, delete markers, and ECR images.");
   console.log(
     options.deleteZone
-      ? `  Route 53: delete ${ZONE} only after delegation and record safety checks.`
+      ? `  Route 53: delete all non-default records and ${ZONE} after the delegation check.`
       : `  Route 53: preserve ${ZONE}`,
   );
   if (dryRun) console.log("No AWS CLI command or DNS lookup was performed.");
@@ -329,30 +330,57 @@ async function cleanupDns(context: AwsContext): Promise<void> {
     throw new DnsBlockedError(`expected one exact public zone; found ${matches.length}`);
   }
 
-  const records = parseJson<{ ResourceRecordSets?: { Name?: string; Type?: string }[] }>(
+  const isDefault = (record: RecordSet): boolean =>
+    record.Name === ZONE && (record.Type === "NS" || record.Type === "SOA");
+  const records = listRecordSets(matches[0].Id, context);
+  const removable = records.filter((record) => !isDefault(record));
+  for (let index = 0; index < removable.length; index += 1000) {
+    const changes = removable.slice(index, index + 1000).map((record) => ({
+      Action: "DELETE",
+      ResourceRecordSet: record,
+    }));
+    const output = requireOutput(
+      runAws(
+        [
+          "route53",
+          "change-resource-record-sets",
+          "--hosted-zone-id",
+          matches[0].Id,
+          "--change-batch",
+          JSON.stringify({ Changes: changes }),
+          "--output",
+          "json",
+        ],
+        context,
+      ),
+    );
+    waitForRoute53Change(output, "Route 53 record deletion", context);
+  }
+
+  const remaining = listRecordSets(matches[0].Id, context);
+  const types = new Set(remaining.map((record) => record.Type));
+  if (remaining.length !== 2 || remaining.some((record) => !isDefault(record)) || !types.has("NS") || !types.has("SOA")) {
+    throw new Error("Route 53 still contains records other than the apex NS and SOA defaults.");
+  }
+  const deletion = requireOutput(
+    runAws(["route53", "delete-hosted-zone", "--id", matches[0].Id, "--output", "json"], context),
+  );
+  waitForRoute53Change(deletion, "Route 53 hosted-zone deletion", context);
+}
+
+function listRecordSets(hostedZoneId: string, context: AwsContext): RecordSet[] {
+  return parseJson<{ ResourceRecordSets?: RecordSet[] }>(
     requireOutput(
-      runAws(["route53", "list-resource-record-sets", "--hosted-zone-id", matches[0].Id, "--output", "json"], context),
+      runAws(["route53", "list-resource-record-sets", "--hosted-zone-id", hostedZoneId, "--output", "json"], context),
     ),
     "Route 53 records",
   ).ResourceRecordSets ?? [];
-  const types = new Set(records.map((record) => record.Type));
-  if (
-    records.length !== 2 ||
-    records.some((record) => record.Name !== ZONE || !["NS", "SOA"].includes(record.Type ?? "")) ||
-    !types.has("NS") ||
-    !types.has("SOA")
-  ) {
-    throw new DnsBlockedError("records other than the zone NS/SOA defaults remain");
-  }
+}
 
-  const deletion = parseJson<{ ChangeInfo?: { Id?: string } }>(
-    requireOutput(
-      runAws(["route53", "delete-hosted-zone", "--id", matches[0].Id, "--output", "json"], context),
-    ),
-    "Route 53 deletion",
-  );
-  if (!deletion.ChangeInfo?.Id) throw new Error("Route 53 returned no deletion change ID.");
-  runAws(["route53", "wait", "resource-record-sets-changed", "--id", deletion.ChangeInfo.Id], context);
+function waitForRoute53Change(output: string, label: string, context: AwsContext): void {
+  const changeId = parseJson<{ ChangeInfo?: { Id?: string } }>(output, label).ChangeInfo?.Id;
+  if (!changeId || !changeId.startsWith("/change/")) throw new Error(`${label} returned no valid change ID.`);
+  runAws(["route53", "wait", "resource-record-sets-changed", "--id", changeId], context);
 }
 
 function parseJson<T>(output: string, label: string): T {
