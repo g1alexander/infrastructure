@@ -2,17 +2,24 @@
 
 import { App } from 'aws-cdk-lib';
 import { getEnvironmentConfig } from '../lib/config/environments';
-import { FoundationStack } from '../lib/foundation-stack';
+import { getStackName } from '../lib/config/naming';
+import { getNetworkConfig } from '../lib/stacks/network/network-config';
+import { NetworkStack } from '../lib/stacks/network/network-stack';
 
 const app = new App();
 const environmentName = app.node.tryGetContext('environment') ?? 'dev';
 const environment = getEnvironmentConfig(environmentName);
+const network = getNetworkConfig(environment.name);
 const stackEnvironment = environment.account
   ? { account: environment.account, region: environment.region }
   : { region: environment.region };
 
-new FoundationStack(app, 'DevFoundationStack', {
-  stackName: environment.stackName,
-  description: 'Development foundation for the aws-prueba project',
+new NetworkStack(app, 'NetworkStack', {
+  stackName: getStackName(environment, 'network'),
+  description: 'Development network for the aws-prueba project',
+  env: stackEnvironment,
+  projectName: environment.projectName,
   environmentName: environment.name,
+  managedBy: 'aws-cdk',
+  network,
 });

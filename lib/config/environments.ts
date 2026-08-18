@@ -1,16 +1,16 @@
 export interface EnvironmentConfig {
+  readonly projectName: "aws-prueba";
   readonly name: "dev";
   readonly account: string | undefined;
   readonly region: "us-east-1";
-  readonly stackName: "aws-prueba-dev-foundation";
 }
 
 const environments = {
   dev: {
+    projectName: "aws-prueba",
     name: "dev",
     account: process.env.CDK_DEFAULT_ACCOUNT,
     region: "us-east-1",
-    stackName: "aws-prueba-dev-foundation",
   },
 } as const satisfies Record<string, EnvironmentConfig>;
 

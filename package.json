@@ -7,8 +7,10 @@
   "scripts": {
     "build": "tsc --noEmit",
     "synth": "cdk synth --context environment=dev",
-    "diff": "cdk diff --context environment=dev",
-    "deploy:dev": "cdk deploy --context environment=dev"
+    "synth:network": "cdk synth NetworkStack --context environment=dev",
+    "diff:network": "cdk diff NetworkStack --context environment=dev",
+    "deploy:network": "cdk deploy NetworkStack --context environment=dev",
+    "destroy:network": "cdk destroy NetworkStack --context environment=dev"
   },
   "engines": {
     "node": ">=20.0.0"
