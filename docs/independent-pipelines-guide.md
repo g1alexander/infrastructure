@@ -18,13 +18,13 @@ Esta nota guarda las decisiones tomadas para continuar el trabajo más adelante.
 
 La evolución prevista es usar pipelines independientes:
 
-| Repositorio | Flujo previsto |
-| --- | --- |
-| `infrastructure` | Desplegar infraestructura estable mediante CDK. |
-| `api-rails` | Probar Rails, construir imagen ARM64, publicar en ECR, migrar y actualizar ECS. |
-| `lambda-js` | Probar, empaquetar y desplegar la Lambda JavaScript. |
-| `lambda-python` | Probar, empaquetar y desplegar la Lambda Python. |
-| `ui-vue` | Usar Amplify Hosting como pipeline del frontend. |
+| Repositorio      | Flujo previsto                                                                  |
+| ---------------- | ------------------------------------------------------------------------------- |
+| `infrastructure` | Desplegar infraestructura estable mediante CDK.                                 |
+| `api-rails`      | Probar Rails, construir imagen ARM64, publicar en ECR, migrar y actualizar ECS. |
+| `lambda-js`      | Probar, empaquetar y desplegar la Lambda JavaScript.                            |
+| `lambda-python`  | Probar, empaquetar y desplegar la Lambda Python.                                |
+| `ui-vue`         | Usar Amplify Hosting como pipeline del frontend.                                |
 
 Los recursos de pipeline se definirán mediante CDK dentro de:
 
@@ -79,3 +79,53 @@ Antes de crear pipelines independientes, cada Lambda deberá recibir un stack pe
 3. Implementar `PipelineFoundationStack` con CodeConnections.
 4. Autorizar la conexión hasta que quede `AVAILABLE`.
 5. Implementar y validar un pipeline por vez, comenzando por infraestructura.
+
+---
+
+aws login --profile aws-prueba-dev
+
+aws configure set region us-east-1 --profile aws-prueba-dev
+aws configure set output json --profile aws-prueba-dev
+
+aws sts get-caller-identity --profile aws-prueba-dev
+
+pnpm exec cdk bootstrap aws://339712793841/us-east-1 \
+ --profile aws-prueba-dev
+
+# 2
+
+aws cloudformation describe-stacks \
+ --stack-name CDKToolkit \
+ --region us-east-1 \
+ --profile aws-prueba-dev \
+ --query "Stacks[0].StackStatus" \
+ --output text
+
+AWS_PROFILE=aws-prueba-dev pnpm synth:network
+
+AWS_PROFILE=aws-prueba-dev pnpm diff:network
+
+AWS_PROFILE=aws-prueba-dev pnpm deploy:network
+
+AWS_PROFILE=aws-prueba-dev pnpm destroy:network
+
+---
+
+AWS_PROFILE=aws-prueba-dev pnpm synth:data
+AWS_PROFILE=aws-prueba-dev pnpm diff:data
+
+Revisado el diff:
+AWS_PROFILE=aws-prueba-dev pnpm deploy:data
+El despliegue puede tardar entre 10 y 25 minutos. Para desmontar solamente los datos:
+AWS_PROFILE=aws-prueba-dev pnpm destroy:data
+Primero se destruye DataStack y después NetworkStack, nunca al revés.
+
+AWS_PROFILE=aws-prueba-dev pnpm synth:serverless
+AWS_PROFILE=aws-prueba-dev pnpm diff:serverless
+
+AWS_PROFILE=aws-prueba-dev pnpm deploy:serverless
+
+AWS_PROFILE=aws-prueba-dev pnpm synth:compute
+AWS_PROFILE=aws-prueba-dev pnpm diff:compute
+
+AWS_PROFILE=aws-prueba-dev pnpm deploy:compute
