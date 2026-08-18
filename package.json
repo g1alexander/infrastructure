@@ -18,7 +18,11 @@
     "synth:serverless": "cdk synth ServerlessStack --context environment=dev",
     "diff:serverless": "cdk diff ServerlessStack --context environment=dev",
     "deploy:serverless": "cdk deploy ServerlessStack --context environment=dev",
-    "destroy:serverless": "cdk destroy ServerlessStack --context environment=dev"
+    "destroy:serverless": "cdk destroy ServerlessStack --context environment=dev",
+    "synth:compute": "cdk synth ComputeStack --context environment=dev",
+    "diff:compute": "cdk diff ComputeStack --context environment=dev",
+    "deploy:compute": "cdk deploy ComputeStack --context environment=dev",
+    "destroy:compute": "cdk destroy ComputeStack --context environment=dev"
   },
   "engines": {
     "node": ">=20.0.0"
