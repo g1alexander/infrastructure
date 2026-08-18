@@ -6,6 +6,7 @@
   "description": "AWS CDK infrastructure for the aws-prueba project",
   "scripts": {
     "build": "tsc --noEmit",
+    "destroy:all": "ts-node scripts/destroy-all.ts",
     "migrate:dev": "ts-node scripts/migrate-dev.ts",
     "synth": "cdk synth --context environment=dev",
     "synth:network": "cdk synth NetworkStack --context environment=dev",
