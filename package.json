@@ -1,0 +1,26 @@
+{
+  "name": "aws-prueba-infrastructure",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@11.22.0",
+  "description": "AWS CDK infrastructure for the aws-prueba project",
+  "scripts": {
+    "build": "tsc --noEmit",
+    "synth": "cdk synth --context environment=dev",
+    "diff": "cdk diff --context environment=dev",
+    "deploy:dev": "cdk deploy --context environment=dev"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "dependencies": {
+    "aws-cdk-lib": "2.265.0",
+    "constructs": "10.8.1"
+  },
+  "devDependencies": {
+    "@types/node": "26.2.0",
+    "aws-cdk": "2.1137.0",
+    "ts-node": "10.9.2",
+    "typescript": "5.9.3"
+  }
+}

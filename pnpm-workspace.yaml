@@ -1,0 +1,3 @@
+minimumReleaseAgeExclude:
+  - aws-cdk@2.1137.0
+  - '@aws-cdk/cloud-assembly-schema@54.19.0'
